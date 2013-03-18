@@ -38,7 +38,7 @@ object SalaryMain {
     reduceWords(testFullDescCounter, testFullDescAggregator, jsObj)
     reduceDocFreq(testFullDescCounter, testFullDescDocFreq, jsObj)
 
-    val trainIds = new mutable.ArrayBuffer[Long]();
+    val trainIds = new mutable.ArrayBuffer[Long]()
     for (elem <- train)
       trainIds += elem.as[Long]("Id")
     val reverseTrainIds: mutable.Map[Long, Int] = new mutable.HashMap()
@@ -57,7 +57,7 @@ object SalaryMain {
 
     println(reverseWords.size)
 
-    //createTable(trainFullDescCounter, words)
+    createTable(trainFullDescCounter, words)
   }
 
   private[this] def generateWords(inColl: MongoCollection, field: String, outColl: MongoCollection): Unit = {
@@ -126,24 +126,25 @@ object SalaryMain {
       writers(i) = new CSVWriter(new FileWriter("data/table/chunk%04d.csv".format(i)))
 
     try {
-      val r = shuffledWords.size % numChunks;
+      val r = shuffledWords.size % numChunks
+      val separators: java.util.List[Integer] = new java.util.ArrayList()
       var left = 0
+      separators.add(left)
       for (i <- List.range(0, writers.length)) {
         val offset = if (i < r) 1 else 0
         val right = left + chunkSize + offset
         val chunk = shuffledWords.slice(left, right)
         writers(i).writeNext(chunk.toArray)
         left = right
+        separators.add(left)
       }
-
-      val limit = r * (chunkSize + 1)
 
       val chunkSets = new Array[mutable.TreeSet[(Int, Int)]](numChunks)
       for (i <- List.range(0, numChunks))
         chunkSets(i) = new mutable.TreeSet()
 
       var numWords = inColl.find.count
-      var wordNo: Int = 0;
+      var wordNo: Int = 0
       for (entry <- inColl.find) {
         wordNo += 1
         if (wordNo % 2500 == 0) {
@@ -158,8 +159,10 @@ object SalaryMain {
           val word = dbObj.as[String]("word")
           val counter = dbObj.as[Int]("counter")
           val index = reverseShuffledWords(word)
-          val pos = if (index < limit) index / (chunkSize + 1) else r + (index - limit) / chunkSize
-          chunkSets(pos) += index -> counter
+          var pos = java.util.Collections.binarySearch[Integer](separators, index)
+          if (pos < 0)
+            pos = -pos - 2
+          chunkSets(pos) += index -> (index - separators.get(pos))
         }
         for ((chunkSet, i) <- chunkSets.zipWithIndex) {
           val line = new Array[String](2 * chunkSet.size)
@@ -177,7 +180,7 @@ object SalaryMain {
   }
 
   private[this] def createReverseMap[T](seq: Seq[T]) = {
-    val reverseSeq: mutable.Map[T, Int] = new mutable.HashMap();
+    val reverseSeq: mutable.Map[T, Int] = new mutable.HashMap()
     for ((elem, index) <- seq.zipWithIndex)
       reverseSeq(elem) = index
     reverseSeq
