@@ -162,7 +162,7 @@ object SalaryMain {
           var pos = java.util.Collections.binarySearch[Integer](separators, index)
           if (pos < 0)
             pos = -pos - 2
-          chunkSets(pos) += index -> (index - separators.get(pos))
+          chunkSets(pos) += (index - separators.get(pos)) -> counter
         }
         for ((chunkSet, i) <- chunkSets.zipWithIndex) {
           val line = new Array[String](2 * chunkSet.size)
