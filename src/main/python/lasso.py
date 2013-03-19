@@ -8,7 +8,7 @@ from pymongo import MongoClient
 
 from scipy.sparse import csr_matrix
 
-from sklearn.linear_model import Lasso, LassoLars
+from jobutil import select_main_coefficients
 
 connection = MongoClient()
 salary_db = connection['salary']
@@ -55,10 +55,7 @@ with open('data/pca/results.txt', 'a') as out_file:
 		print('index', index, len(header))
 		X = csr_matrix((values, (row_list, column_list)),
 			[ num_docs, len(header) ])
-		classifier = Lasso(alpha=15.0)
-		classifier.fit(X.toarray(), train_values)
-		coef = classifier.coef_
-		main_coef = [ i for i, value in enumerate(coef) if value != 0 ]
+		main_coef = select_main_coefficients(X.toarray(), train_values, 15.0)
 		print(index, ' '.join(map(str, main_coef)), file=out_file)
 		dt = time.time() - t0
 		print("done in %fm" % (dt / 60))
