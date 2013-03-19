@@ -4,16 +4,13 @@ import math
 import os
 import time
 
-from pymongo import MongoClient
-
 from scipy.sparse import csr_matrix
 
+from jobutil import MongoSalaryDB
+from jobutil import build_docfreqs
 from jobutil import select_main_coefficients
 
-connection = MongoClient()
-salary_db = connection['salary']
-train = salary_db.train
-train_fulldesc_docfreq = salary_db.train_fulldesc_docfreq
+salary = MongoSalaryDB()
 
 table_directory = 'data/table'
 files = os.listdir(table_directory)
@@ -22,11 +19,11 @@ files.sort()
 t0 = time.time()
 
 train_values = [ ]
-for row in train.find():
+for row in salary.train.find():
 	train_values.append(row[u'SalaryNormalized'])
 
 with open('data/pca/results.txt', 'a') as out_file:
-	num_docs = train.count()
+	num_docs = salary.train.count()
 	for filename in files:
 		full_filename = os.path.join(table_directory, filename)
 		base = os.path.splitext(filename)[0]
@@ -41,9 +38,7 @@ with open('data/pca/results.txt', 'a') as out_file:
 			for i, row in enumerate(chunkreader):
 				if i == 0:
 					header = [ elem for elem in row ]
-					for word in header:
-						entry = train_fulldesc_docfreq.find_one({ '_id': word })
-						df.append(entry['value'])
+					df = build_docfreqs(salary.train_fulldesc_docfreq, header)
 				else:
 					for j in xrange(0, len(row) / 2):
 						col = int(row[2 * j])

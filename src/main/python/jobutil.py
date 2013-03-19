@@ -1,8 +1,28 @@
 import math
 
+from pymongo import MongoClient
+
 from scipy.sparse import csr_matrix
 
 from sklearn.linear_model import Lasso, LassoLars
+
+class MongoSalaryDB(object):
+	def __init__(self):
+		connection = MongoClient()
+		salary_db = connection['salary']
+		self.train = salary_db.train
+		self.train_fulldesc_counter = salary_db.train_fulldesc_counter
+		self.train_fulldesc_docfreq = salary_db.train_fulldesc_docfreq
+		self.test = salary_db.test
+		self.test_fulldesc_counter = salary_db.test_fulldesc_counter
+		self.test_fulldesc_docfreq = salary_db.test_fulldesc_docfreq
+
+def build_docfreqs(data_coll, words):
+	doc_freqs = [ ]
+	for word in words:
+		entry = data_coll.find_one({ '_id': word })
+		doc_freqs.append(entry['value'])
+	return doc_freqs
 
 def create_reverse_data_index(data_coll, key=None, indices=None):
 	collect_values = key is not None
@@ -25,7 +45,13 @@ def create_reverse_data_index(data_coll, key=None, indices=None):
 			values.append(original_values[row_id])
 	return (forward_index, reverse_index, values)
 
-def create_sparse_features(data_coll, reverse_index, word_map, df, indices=None):
+def create_reverse_index(coll):
+	reverse_index = { }
+	for i, elem in enumerate(coll):
+		reverse_index[elem] = i
+	return reverse_index
+
+def create_sparse_features(data_coll, reverse_index, word_map, df=None, indices=None):
 	skip_indices = indices is None
 	values = [ ]
 	row_list = [ ]
@@ -34,9 +60,9 @@ def create_sparse_features(data_coll, reverse_index, word_map, df, indices=None)
 	percent = 0
 	j = 0
 	for i, row in enumerate(data_coll.find()):
-		newPercent = (i * 20) / num_docs
+		newPercent = (i * 10) / num_docs
 		if newPercent != percent:
-			print('%d%% done' % (5 * newPercent,))
+			print('%d%% done' % (10 * newPercent,))
 			percent = newPercent
 		row_id = row[u'Id']
 		if row_id in reverse_index:
@@ -47,7 +73,10 @@ def create_sparse_features(data_coll, reverse_index, word_map, df, indices=None)
 				if word in word_map:
 					counter = elem[u'counter']
 					col = word_map[word]
-					value = (1 + math.log(counter)) * math.log(num_docs / df[col])
+					if df is not None:
+						value = (1 + math.log(counter)) * math.log(num_docs / df[col])
+					else:
+						value = counter
 					values.append(value)
 					row_list.append(index)
 					column_list.append(col)
