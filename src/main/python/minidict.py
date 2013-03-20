@@ -30,6 +30,8 @@ from jobutil import create_reverse_index
 from jobutil import create_sparse_features
 from jobutil import select_important_words
 from jobutil import select_main_coefficients
+from parser import parse_headers
+from parser import parse_sparse_results
 
 def get_pipeline():
 	steps = [
@@ -41,45 +43,61 @@ def get_pipeline():
 	]
 	return Pipeline(steps)
 
-table_directory = 'data/table'
-files = os.listdir(table_directory)
-files.sort()
-headers = { }
+def read_row_from_file(filename):
+	with open(filename, 'r') as f:
+		reader = csv.reader(f)
+		for row in reader:
+			return row
+	return [ ]
 
-percent = 0
-for i, filename in enumerate(files):
-	newPercent = (i * 20) / len(files)
-	if newPercent != percent:
-		print('%d%% files processed' % (5 * newPercent,))
-		percent = newPercent
-	full_filename = os.path.join(table_directory, filename)
-	base = os.path.splitext(filename)[0]
-	index = int(base[5:])
-	with open(full_filename, 'r') as f:
-		chunkreader = csv.reader(f)
-		for row in chunkreader:
-			headers[index] = row
-			break
+def write_row_to_file(filename, row):
+	with open(filename, 'w') as f:
+		writer = csv.writer(f)
+		writer.writerow(row)
 
-words = [ ]
-with open('data/pca/results.txt', 'r') as f:
-	index = -1
-	for line in f:
-		tokens = map(int, line.split())
-		index = tokens[0]
-		for position in tokens[1:]:
-			word = headers[index][position]
-			words.append(word)
-print('#words', len(words))
+def bootstrap_fulldesc(salary):
+	headers = parse_headers('data/table')
+	words = parse_sparse_results('data/fulldesc/stage0results.csv', headers)
+	return words
 
-with open('data/pca/minidict.txt', 'w') as f:
-	minidict_writer = csv.writer(f)
-	minidict_writer.writerow(words)
+def bootstrap_title(salary):
+	words = [ ]
+	docfreq = salary['train_title_docfreq']
+	for entry in docfreq.find():
+		word = entry['_id']
+		words.append(word.encode('utf-8'))
+	return words
+
+def iterative_selection(salary, stages, bootstrap_function, alpha):
+	for i, stage in enumerate(stages):
+		if not os.path.isfile(stage):
+			if i == 0:
+				words = bootstrap_function(salary)
+			else:
+				prev_words = read_row_from_file(stages[i - 1])
+				num_chunks = len(prev_words) // 100
+				print('num_chunks:', num_chunks)
+				words = select_important_words(prev_words, salary, 'train', 'title', num_chunks, alpha)
+			write_row_to_file(stage, words)
+		else:
+			words = read_row_from_file(stage)
+		num_words = len(words)
+		print('stage %d: %d words' % (i, num_words))
+
+def main():
+	salary = MongoSalaryDB()
+
+	fulldesc_stages = [
+		'data/fulldesc/stage1dict.csv',
+		'data/fulldesc/stage2dict.csv'
+	]
+	iterative_selection(salary, fulldesc_stages, bootstrap_fulldesc, 400.0)
+
+	title_stages = [
+		'data/title/stage1dict.csv',
+		'data/title/stage2dict.csv'
+	]
+	iterative_selection(salary, title_stages, bootstrap_title, 10.0)
 
 if __name__ == '__main__':
-	salary = MongoSalaryDB()
-	out_words = select_important_words(words, salary, 'train', 'fulldesc')
-
-	with open('data/fulldesc/microdict.txt', 'w') as f:
-		microdict_writer = csv.writer(f)
-		microdict_writer.writerow(out_words)
+	main()

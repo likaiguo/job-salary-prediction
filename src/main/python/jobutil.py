@@ -91,9 +91,9 @@ def create_sparse_features(data_coll, reverse_index, word_map, df=None, indices=
 	shape = (len(reverse_index), len(word_map))
 	return csr_matrix((values, (row_list, column_list)), shape)
 
-def select_important_words(in_words, salary, domain, field):
+def select_important_words(in_words, salary, domain, field, num_chunks, alpha):
 	random.shuffle(in_words)
-	chunks = split_in_chunks(in_words, 118)
+	chunks = split_in_chunks(in_words, num_chunks)
 
 	multi_reverse_words = [ ]
 	for chunk in chunks:
@@ -109,7 +109,7 @@ def select_important_words(in_words, salary, domain, field):
 	for i, reverse_words in enumerate(multi_reverse_words):
 		doc_freqs = build_docfreqs(salary_collection('docfreq'), chunks[i])
 		X = create_sparse_features(salary_collection('counter'), reverse_index, reverse_words, doc_freqs)
-		main_coef = select_main_coefficients(X.toarray(), y, 400.0)
+		main_coef = select_main_coefficients(X.toarray(), y, alpha)
 		chunk = chunks[i]
 		for index in main_coef:
 			out_words.append(chunk[index])

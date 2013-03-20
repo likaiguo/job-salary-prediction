@@ -15,7 +15,7 @@ from sklearn.metrics import mean_absolute_error
 salary = MongoSalaryDB()
 
 words = [ ]
-with open('data/fulldesc/microdict.txt') as f:
+with open('data/fulldesc/stage2dict.csv') as f:
 	dictreader = csv.reader(f)
 	for row in dictreader:
 		for word in row:
