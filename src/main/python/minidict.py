@@ -28,6 +28,7 @@ from jobutil import build_docfreqs
 from jobutil import create_reverse_data_index
 from jobutil import create_reverse_index
 from jobutil import create_sparse_features
+from jobutil import select_important_words
 from jobutil import select_main_coefficients
 
 def get_pipeline():
@@ -39,10 +40,6 @@ def get_pipeline():
 			random_state=3465343))
 	]
 	return Pipeline(steps)
-
-t0 = time.time()
-
-salary = MongoSalaryDB()
 
 table_directory = 'data/table'
 files = os.listdir(table_directory)
@@ -79,39 +76,10 @@ with open('data/pca/minidict.txt', 'w') as f:
 	minidict_writer = csv.writer(f)
 	minidict_writer.writerow(words)
 
-random.shuffle(words)
-num_words = len(words)
-num_chunks = 118
-chunk_size = num_words / num_chunks
-r = num_words % num_chunks
+if __name__ == '__main__':
+	salary = MongoSalaryDB()
+	out_words = select_important_words(words, salary, 'train', 'fulldesc')
 
-chunks = [ ]
-left = 0
-for i in xrange(num_chunks):
-	num_elems = chunk_size + (1 if i < r else 0)
-	right = left + num_elems
-	chunk = words[left:right]
-	chunks.append(chunk)
-	left = right
-
-multi_reverse_words = [ ]
-for chunk in chunks:
-	multi_reverse_words.append(create_reverse_index(chunk))
-
-_, reverse_index, y = create_reverse_data_index(salary.train, u'SalaryNormalized')
-
-main_words = [ ]
-for i, reverse_words in enumerate(multi_reverse_words):
-	doc_freqs = build_docfreqs(salary.train_fulldesc_docfreq, chunks[i])
-	X = create_sparse_features(salary.train_fulldesc_counter, reverse_index, reverse_words, doc_freqs)
-	main_coef = select_main_coefficients(X.toarray(), y, 400.0)
-	chunk = chunks[i]
-	for index in main_coef:
-		main_words.append(chunk[index])
-	print('chunk %d: %d words' % (i, len(main_coef)), map(lambda x: chunk[x], main_coef))
-	dt = time.time() - t0
-	print("done in %fm" % (dt / 60))
-
-with open('data/fulldesc/microdict.txt', 'w') as f:
-	microdict_writer = csv.writer(f)
-	microdict_writer.writerow(main_words)
+	with open('data/fulldesc/microdict.txt', 'w') as f:
+		microdict_writer = csv.writer(f)
+		microdict_writer.writerow(out_words)
