@@ -36,3 +36,15 @@ def parse_sparse_results(filename, headers):
 				words.append(word)
 
 	return words
+
+def read_row_from_file(filename):
+	with open(filename, 'r') as f:
+		reader = csv.reader(f)
+		for row in reader:
+			return row
+	return [ ]
+
+def write_row_to_file(filename, row):
+	with open(filename, 'w') as f:
+		writer = csv.writer(f)
+		writer.writerow(row)

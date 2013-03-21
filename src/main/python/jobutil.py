@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import math
 import random
 
@@ -7,16 +9,12 @@ from scipy.sparse import csr_matrix
 
 from sklearn.linear_model import Lasso, LassoLars
 
+from features import create_sparse_features
+
 class MongoSalaryDB(object):
 	def __init__(self):
 		connection = MongoClient()
 		self.salary_db = connection['salary']
-		self.train = self.salary_db.train
-		self.train_fulldesc_counter = self.salary_db.train_fulldesc_counter
-		self.train_fulldesc_docfreq = self.salary_db.train_fulldesc_docfreq
-		self.test = self.salary_db.test
-		self.test_fulldesc_counter = self.salary_db.test_fulldesc_counter
-		self.test_fulldesc_docfreq = self.salary_db.test_fulldesc_docfreq
 
 	def __getitem__(self, key):
 		return self.salary_db[key]
@@ -25,7 +23,10 @@ def build_docfreqs(data_coll, words):
 	doc_freqs = [ ]
 	for word in words:
 		entry = data_coll.find_one({ '_id': word })
-		doc_freqs.append(entry['value'])
+		try:
+			doc_freqs.append(entry['value'])
+		except TypeError, e:
+			print(data_coll, word)
 	return doc_freqs
 
 def create_reverse_data_index(data_coll, key=None, indices=None):
@@ -49,47 +50,11 @@ def create_reverse_data_index(data_coll, key=None, indices=None):
 			values.append(original_values[row_id])
 	return (forward_index, reverse_index, values)
 
-def create_reverse_index(coll):
+def create_reverse_index(coll, offset=0):
 	reverse_index = { }
 	for i, elem in enumerate(coll):
-		reverse_index[elem] = i
+		reverse_index[elem] = offset + i
 	return reverse_index
-
-def create_sparse_features(data_coll, reverse_index, word_map, df=None, indices=None):
-	skip_indices = indices is None
-	values = [ ]
-	row_list = [ ]
-	column_list = [ ]
-	num_docs = data_coll.count()
-	percent = 0
-	j = 0
-	for i, row in enumerate(data_coll.find()):
-		newPercent = (i * 10) / num_docs
-		if newPercent != percent:
-			print('%d%% done' % (10 * newPercent,))
-			percent = newPercent
-		row_id = row[u'Id']
-		if row_id in reverse_index:
-			index = reverse_index[row_id]
-			arr = row[u'arr']
-			for elem in arr:
-				word = elem[u'word']
-				if word in word_map:
-					counter = elem[u'counter']
-					col = word_map[word]
-					if df is not None:
-						value = (1 + math.log(counter)) * math.log(num_docs / df[col])
-					else:
-						value = counter
-					values.append(value)
-					row_list.append(index)
-					column_list.append(col)
-			j += 1
-			#if j == 4000:
-			#	break
-	print('dat row list', len(row_list), len(set(row_list)))
-	shape = (len(reverse_index), len(word_map))
-	return csr_matrix((values, (row_list, column_list)), shape)
 
 def select_important_words(in_words, salary, domain, field, num_chunks, alpha):
 	random.shuffle(in_words)
@@ -108,7 +73,8 @@ def select_important_words(in_words, salary, domain, field, num_chunks, alpha):
 	out_words = [ ]
 	for i, reverse_words in enumerate(multi_reverse_words):
 		doc_freqs = build_docfreqs(salary_collection('docfreq'), chunks[i])
-		X = create_sparse_features(salary_collection('counter'), reverse_index, reverse_words, doc_freqs)
+		feature_maps = [ (salary_collection('counter'), reverse_words) ]
+		X = create_sparse_features(reverse_index, feature_maps, doc_freqs)
 		main_coef = select_main_coefficients(X.toarray(), y, alpha)
 		chunk = chunks[i]
 		for index in main_coef:

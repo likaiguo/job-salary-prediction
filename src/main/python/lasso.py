@@ -19,11 +19,11 @@ files.sort()
 t0 = time.time()
 
 train_values = [ ]
-for row in salary.train.find():
+for row in salary['train'].find():
 	train_values.append(row[u'SalaryNormalized'])
 
 with open('data/pca/results.txt', 'a') as out_file:
-	num_docs = salary.train.count()
+	num_docs = salary['train'].count()
 	for filename in files:
 		full_filename = os.path.join(table_directory, filename)
 		base = os.path.splitext(filename)[0]
@@ -38,7 +38,7 @@ with open('data/pca/results.txt', 'a') as out_file:
 			for i, row in enumerate(chunkreader):
 				if i == 0:
 					header = [ elem for elem in row ]
-					df = build_docfreqs(salary.train_fulldesc_docfreq, header)
+					df = build_docfreqs(salary['train_fulldesc_docfreq'], header)
 				else:
 					for j in xrange(0, len(row) / 2):
 						col = int(row[2 * j])
