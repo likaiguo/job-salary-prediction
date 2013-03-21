@@ -18,11 +18,11 @@ object SalaryMain {
 
   def main(args: Array[String]) = {
     val manager = new DatabaseManager()
-    val train = manager.salaryDB("train")
-    val test = manager.salaryDB("test")
+
     val trainFullDescCounter = manager.salaryDB("train_fulldesc_counter")
     val trainFullDescAggregator = manager.salaryDB("train_fulldesc_aggregator")
     val trainFullDescDocFreq = manager.salaryDB("train_fulldesc_docfreq")
+
     val testFullDescCounter = manager.salaryDB("test_fulldesc_counter")
     val testFullDescAggregator = manager.salaryDB("test_fulldesc_aggregator")
     val testFullDescDocFreq = manager.salaryDB("test_fulldesc_docfreq")
@@ -30,20 +30,14 @@ object SalaryMain {
     val javascript = manager.salaryDB("javascript")
     val jsObj = javascript.findOne.get
 
-    generateWords(train, "FullDescription", trainFullDescCounter)
-    reduceWords(trainFullDescCounter, trainFullDescAggregator, jsObj)
-    reduceDocFreq(trainFullDescCounter, trainFullDescDocFreq, jsObj)
-
-    generateWords(test, "FullDescription", testFullDescCounter)
-    reduceWords(testFullDescCounter, testFullDescAggregator, jsObj)
-    reduceDocFreq(testFullDescCounter, testFullDescDocFreq, jsObj)
-
-    val trainIds = new mutable.ArrayBuffer[Long]()
-    for (elem <- train)
-      trainIds += elem.as[Long]("Id")
-    val reverseTrainIds: mutable.Map[Long, Int] = new mutable.HashMap()
-    for ((elem, index) <- trainIds.zipWithIndex)
-      reverseTrainIds(elem) = index
+    processFeature(manager, "train", "fulldesc", "FullDescription", jsObj)
+    processFeature(manager, "test", "fulldesc", "FullDescription", jsObj)
+    processFeature(manager, "train", "title", "Title", jsObj)
+    processFeature(manager, "test", "title", "Title", jsObj)
+    processFeature(manager, "train", "rawloc", "LocationRaw", jsObj)
+    processFeature(manager, "test", "rawloc", "LocationRaw", jsObj)
+    processFeature(manager, "train", "normloc", "LocationNormalized", jsObj)
+    processFeature(manager, "test", "normloc", "LocationNormalized", jsObj)
 
     //MongoDBObject.empty, MongoDBObject("_id" -> 1)
     val wordSet: mutable.Set[String] = new mutable.HashSet[String]()
@@ -53,11 +47,28 @@ object SalaryMain {
     //  wordSet += elem.as[String]("_id")
     val words: Seq[String] = wordSet.toSeq
     words.sortWith(_ < _)
-    val reverseWords = createReverseMap(words)
 
-    println(reverseWords.size)
+    println(words.size)
 
     createTable(trainFullDescCounter, words)
+  }
+
+  private[this] def processFeature(manager: DatabaseManager, domain: String,
+    field: String, attrName: String, jsObj: MongoDBObject): Unit = {
+
+    val attrCollection = { attr: String } => {
+      val arr = Array(domain, field, attr)
+      manager.salaryDB(arr.mkString("_"))
+    }
+
+    val domainColl = manager.salaryDB(domain)
+    val counterColl = attrCollection("counter")
+    val aggregatorColl = attrCollection("aggregator")
+    val docFreqColl = attrCollection("docfreq")
+
+    generateWords(domainColl, attrName, counterColl)
+    reduceWords(counterColl, aggregatorColl, jsObj)
+    reduceDocFreq(counterColl, docFreqColl, jsObj)
   }
 
   private[this] def generateWords(inColl: MongoCollection, field: String, outColl: MongoCollection): Unit = {
@@ -74,8 +85,8 @@ object SalaryMain {
         percentDone = newPercentDone
         println("Progress generating words: %d %%".format(percentDone))
       }
-      val fullDescription = elem(field)
-      val ptbt = new PTBTokenizer(new StringReader(fullDescription.toString),
+      val fieldValue = elem(field)
+      val ptbt = new PTBTokenizer(new StringReader(fieldValue.toString),
         new CoreLabelTokenFactory(), "")
       words.clear
       while (ptbt.hasNext) {
